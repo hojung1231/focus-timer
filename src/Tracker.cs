@@ -87,13 +87,7 @@ namespace FocusTimer
             return r;
         }
 
-        public double IdleSeconds()
-        {
-            var lii = new Native.LASTINPUTINFO { cbSize = 8 };
-            if (!Native.GetLastInputInfo(ref lii)) return 0;
-            uint idleMs = unchecked((uint)Environment.TickCount - lii.dwTime);
-            return idleMs / 1000.0;
-        }
+        public double IdleSeconds() => InputIdle.Seconds();
 
         public bool IsAlive(IntPtr hwnd) => Native.IsWindow(hwnd);
 

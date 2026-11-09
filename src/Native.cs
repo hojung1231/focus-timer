@@ -4,6 +4,34 @@ using System.Text;
 
 namespace FocusTimer
 {
+    /// <summary>마지막 키보드·마우스 입력 후 지난 시간</summary>
+    static class InputIdle
+    {
+        public const double Limit = 30;   // 30초 동안 움직임이 없으면 타이머 정지
+
+        public static double Seconds()
+        {
+            try
+            {
+                var lii = new Native.LASTINPUTINFO { cbSize = 8 };
+                if (!Native.GetLastInputInfo(ref lii)) return 0;
+                return unchecked((uint)Environment.TickCount - lii.dwTime) / 1000.0;
+            }
+            catch
+            {
+                // Windows가 아닌 테스트 환경: 파일에 적힌 숫자를 입력 없는 시간으로 사용
+                try
+                {
+                    var f = Environment.GetEnvironmentVariable("FOCUSTIMER_DEMO_IDLE_FILE");
+                    if (f != null && System.IO.File.Exists(f))
+                        return double.Parse(System.IO.File.ReadAllText(f).Trim(), System.Globalization.CultureInfo.InvariantCulture);
+                }
+                catch { }
+                return 0;
+            }
+        }
+    }
+
     static class Native
     {
         [DllImport("user32.dll")] public static extern bool ReleaseCapture();

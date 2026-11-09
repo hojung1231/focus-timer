@@ -7,11 +7,13 @@ namespace FocusTimer
     /// <summary>홈 화면: 버전 선택</summary>
     class HomeForm : WidgetForm
     {
+        public override int ModeId => 0;
+
         public event Action<int> ModeChosen;
 
         public HomeForm() : base(showHome: false)
         {
-            AddBannerItem("  업무 집중 타이머", (int)(140 * S), null, false);
+            AddBannerItem(" 업무 집중 타이머", (int)(120 * S), null, false);
 
             var c1 = new OptionCard(S, 1, "직접 기록", "업무를 입력하고\n직접 시작 · 정지");
             var c2 = new OptionCard(S, 2, "자동 감지", "하는 작업을 알아서 기록\n딴짓하면 버튼 하나로 복귀");
@@ -19,11 +21,11 @@ namespace FocusTimer
             c2.Click += (o, e) => BeginInvoke((Action)(() => ModeChosen?.Invoke(2)));
 
             int w = Pad + 2 * (ColW + Pad);
-            c1.Bounds = new Rectangle(Pad, BannerH + Pad, ColW, BoxH + Gap + TimerH);
-            c2.Bounds = new Rectangle(Pad * 2 + ColW, BannerH + Pad, ColW, BoxH + Gap + TimerH);
+            c1.Bounds = new Rectangle(Pad, BannerH + Pad, ColW, BoxH);
+            c2.Bounds = new Rectangle(Pad * 2 + ColW, BannerH + Pad, ColW, BoxH);
             Controls.Add(c1);
             Controls.Add(c2);
-            SetContentSize(w, Pad + BoxH + Gap + TimerH + Pad);
+            SetContentSize(w, Pad + BoxH + Pad);
         }
     }
 
@@ -45,9 +47,9 @@ namespace FocusTimer
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             BackColor = Theme.FormBg;
             Cursor = Cursors.Hand;
-            numFont = new Font("Consolas", 10f, FontStyle.Bold);
-            titleFont = new Font("Malgun Gothic", 13f, FontStyle.Bold);
-            descFont = new Font("Malgun Gothic", 8.5f);
+            numFont = new Font("Consolas", 8.5f, FontStyle.Bold);
+            titleFont = new Font("Malgun Gothic", 12f, FontStyle.Bold);
+            descFont = new Font("Malgun Gothic", 8f);
         }
 
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
@@ -62,16 +64,16 @@ namespace FocusTimer
                              : (number == 1 ? Theme.PausedBg : Theme.RunningBg);
             Theme.FillRounded(g, ClientRectangle, (int)(6 * s), bg);
 
-            int ip = (int)(10 * s);
+            int ip = (int)(8 * s);
             var r = Rectangle.Inflate(ClientRectangle, -ip, -ip);
             TextRenderer.DrawText(g, "VER " + number, numFont, r, Color.FromArgb(200, 255, 255, 255),
                 TextFormatFlags.Left | TextFormatFlags.Top);
 
-            var titleRect = new Rectangle(r.X, r.Y + (int)(18 * s), r.Width, (int)(30 * s));
+            var titleRect = new Rectangle(r.X, r.Y + (int)(13 * s), r.Width, (int)(24 * s));
             TextRenderer.DrawText(g, title, titleFont, titleRect, Color.White,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
 
-            var descRect = new Rectangle(r.X, titleRect.Bottom + (int)(4 * s), r.Width, r.Bottom - titleRect.Bottom);
+            var descRect = new Rectangle(r.X, titleRect.Bottom + (int)(2 * s), r.Width, r.Bottom - titleRect.Bottom);
             TextRenderer.DrawText(g, desc, descFont, descRect, Color.FromArgb(225, 255, 255, 255),
                 TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
         }

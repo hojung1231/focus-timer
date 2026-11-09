@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 
@@ -11,6 +12,8 @@ namespace FocusTimer
     /// <summary>버전 1: 직접 입력하고 직접 시작·정지</summary>
     class ManualForm : WidgetForm
     {
+        public override int ModeId => 1;
+
         readonly List<TaskBox> tasks = new List<TaskBox>();
         readonly Timer tick;
         int saveCounter;
@@ -19,7 +22,7 @@ namespace FocusTimer
 
         public ManualForm() : base(showHome: true)
         {
-            var add = AddBannerItem("+ 새 업무", (int)(78 * S), "오른쪽에 새 업무 추가", true);
+            var add = AddBannerItem("+ 새 업무", (int)(64 * S), "오른쪽에 새 업무 추가", true);
             add.Click += (o, e) => AddTask(focus: true);
 
             LoadTasks();
@@ -29,6 +32,7 @@ namespace FocusTimer
             tick = new Timer { Interval = 250 };
             tick.Tick += (o, e) =>
             {
+                CheckIdle();
                 foreach (var t in tasks) if (t.Running) t.InvalidateTimer();
                 if (++saveCounter >= 240) { saveCounter = 0; SaveTasks(); } // 1분마다 자동 저장
             };
@@ -39,6 +43,21 @@ namespace FocusTimer
         {
             base.OnShown(e);
             if (!tasks[0].HasStarted) tasks[0].BeginEdit();
+        }
+
+        /// <summary>30초 동안 움직임이 없으면 자동 정지, 다시 움직이면 자동 재개</summary>
+        void CheckIdle()
+        {
+            double idle = InputIdle.Seconds();
+            if (idle >= InputIdle.Limit)
+            {
+                foreach (var t in tasks) if (t.Running) t.IdlePause(idle);
+            }
+            else if (idle < 2)
+            {
+                var t = tasks.FirstOrDefault(x => x.AutoPaused);
+                if (t != null) t.Resume();
+            }
         }
 
         TaskBox AddTask(bool focus, bool keepCenter = true)
@@ -147,6 +166,7 @@ namespace FocusTimer
         public bool HasStarted;   // Enter로 한 번이라도 시작했는지
         public bool Running;
         public bool Editing;
+        public bool AutoPaused;   // 움직임이 없어서 자동으로 멈춘 상태
 
         long accTicks;
         readonly Stopwatch sw = new Stopwatch();
@@ -177,8 +197,8 @@ namespace FocusTimer
             TimerRect = new Rectangle(0, boxH + gap, w, timerH);
 
             textFont = new Font("Malgun Gothic", 11f, FontStyle.Bold);
-            timerFont = new Font("Consolas", 12f, FontStyle.Bold);
-            hintFont = new Font("Malgun Gothic", 8.5f);
+            timerFont = new Font("Consolas", 10.5f, FontStyle.Bold);
+            hintFont = new Font("Malgun Gothic", 8f);
 
             editor = new TextBox
             {
@@ -298,6 +318,7 @@ namespace FocusTimer
 
         public void Resume()
         {
+            AutoPaused = false;
             if (Running) return;
             Running = true;
             sw.Restart();
@@ -308,10 +329,25 @@ namespace FocusTimer
 
         public void Pause()
         {
+            AutoPaused = false;
             if (!Running) return;
             accTicks += sw.Elapsed.Ticks;
             sw.Reset();
             Running = false;
+            Changed?.Invoke();
+            Invalidate();
+        }
+
+        /// <summary>자동 정지: 움직임이 없던 시간은 빼고 멈춤</summary>
+        public void IdlePause(double idleSeconds)
+        {
+            if (!Running) return;
+            long run = sw.Elapsed.Ticks;
+            long idleTicks = Math.Min(run, TimeSpan.FromSeconds(idleSeconds).Ticks);
+            accTicks += run - idleTicks;
+            sw.Reset();
+            Running = false;
+            AutoPaused = true;
             Changed?.Invoke();
             Invalidate();
         }
@@ -405,9 +441,9 @@ namespace FocusTimer
             }
             else
             {
-                string str = (Running ? "● " : "‖ ") + Theme.Fmt(Elapsed);
-                TextRenderer.DrawText(g, str, timerFont, TimerRect,
-                    Running ? Theme.TimerRunning : Theme.TimerPaused, cflags);
+                string str = (Running ? "● " : AutoPaused ? "자리 비움 " : "‖ ") + Theme.Fmt(Elapsed);
+                Color c = Running ? Theme.TimerRunning : AutoPaused ? Theme.TimerAway : Theme.TimerPaused;
+                TextRenderer.DrawText(g, str, timerFont, TimerRect, c, cflags);
             }
         }
 

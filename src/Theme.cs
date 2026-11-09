@@ -26,9 +26,11 @@ namespace FocusTimer
         public static readonly Color DistractBg = Color.FromArgb(197, 34, 31);
         public static readonly Color DistractHover = Color.FromArgb(217, 48, 37);
 
+        public static readonly Color UpdateBg = Color.FromArgb(26, 115, 232);
         public static readonly Color TimerBg = Color.FromArgb(23, 24, 26);
         public static readonly Color TimerPaused = Color.FromArgb(154, 160, 166);
         public static readonly Color TimerRunning = Color.FromArgb(129, 201, 149);
+        public static readonly Color TimerAway = Color.FromArgb(253, 214, 99);
         public static readonly Color Hint = Color.FromArgb(128, 134, 139);
 
         public static GraphicsPath Rounded(Rectangle r, int rad)

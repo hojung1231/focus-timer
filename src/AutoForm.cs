@@ -13,9 +13,11 @@ namespace FocusTimer
     /// </summary>
     class AutoForm : WidgetForm
     {
-        const int MaxBoxes = 3;            // 화면에 보여줄 최근 작업 수
+        public override int ModeId => 2;
+
+        const int MaxBoxes = 3;            // 화면에 보여줄 작업 수
         const double MinShowSeconds = 5;   // 잠깐 스친 창은 목록에 안 보이게
-        const double IdleLimit = 300;      // 5분 동안 입력이 없으면 자리 비움
+        const double IdleLimit = InputIdle.Limit; // 30초 동안 입력이 없으면 자리 비움
 
         enum Mode { Starting, Work, Distract, Idle }
 
@@ -49,8 +51,8 @@ namespace FocusTimer
 
         public AutoForm() : base(showHome: true)
         {
-            AddBannerItem("  자동 감지", (int)(80 * S), null, false);
-            stripH = (int)(28 * S);
+            AddBannerItem(" 자동 감지", (int)(64 * S), null, false);
+            stripH = (int)(22 * S);
 
             bool demo = Environment.GetEnvironmentVariable("FOCUSTIMER_DEMO") == "1" &&
                         Environment.OSVersion.Platform != PlatformID.Win32NT;
@@ -86,7 +88,20 @@ namespace FocusTimer
 
             if (idle >= IdleLimit)
             {
-                if (mode != Mode.Idle) { modeBeforeIdle = mode; mode = Mode.Idle; }
+                if (mode != Mode.Idle)
+                {
+                    // 움직임이 없던 시간은 이미 더해졌으므로 다시 뺌
+                    if (mode == Mode.Work && current != null)
+                    {
+                        double d = Math.Min(idle, current.Seconds);
+                        current.Seconds -= d;
+                        totalWork = Math.Max(0, totalWork - d);
+                    }
+                    else if (mode == Mode.Distract)
+                        distractSec = Math.Max(0, distractSec - idle);
+                    modeBeforeIdle = mode;
+                    mode = Mode.Idle;
+                }
             }
             else
             {
@@ -181,11 +196,19 @@ namespace FocusTimer
         }
 
         // ── 화면 ──────────────────────────────────────────
-        List<WorkItem> VisibleItems() => items
-            .Where(i => i == current || i.Seconds >= MinShowSeconds)
-            .OrderByDescending(i => i.LastActive)
-            .Take(MaxBoxes)
-            .ToList();
+        /// <summary>투자 시간이 많은 작업부터 왼쪽에 (지금 하던 작업은 항상 포함)</summary>
+        List<WorkItem> VisibleItems()
+        {
+            var ranked = items
+                .Where(i => i == current || i.Seconds >= MinShowSeconds)
+                .OrderByDescending(i => i.Seconds)
+                .ThenByDescending(i => i.LastActive)
+                .ToList();
+            var vis = ranked.Take(MaxBoxes).ToList();
+            if (current != null && ranked.Contains(current) && !vis.Contains(current))
+                vis[vis.Count - 1] = current;   // 돌아갈 작업이 밀려나지 않게
+            return vis;
+        }
 
         void EnsureBoxCount(int n)
         {
@@ -333,8 +356,8 @@ namespace FocusTimer
             timerRect = new Rectangle(0, boxH + gap, w, timerH);
             nameFont = new Font("Malgun Gothic", 10.5f, FontStyle.Bold);
             appFont = new Font("Malgun Gothic", 8f, FontStyle.Bold);
-            timerFont = new Font("Consolas", 12f, FontStyle.Bold);
-            hintFont = new Font("Malgun Gothic", 8.5f);
+            timerFont = new Font("Consolas", 10.5f, FontStyle.Bold);
+            hintFont = new Font("Malgun Gothic", 8f);
         }
 
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
@@ -413,7 +436,7 @@ namespace FocusTimer
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             BackColor = Theme.FormBg;
-            font = new Font("Malgun Gothic", 9.5f, FontStyle.Bold);
+            font = new Font("Malgun Gothic", 8.5f, FontStyle.Bold);
         }
 
         public void Set(string t, Color b, Color f, bool canClick)
