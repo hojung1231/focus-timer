@@ -19,7 +19,23 @@ namespace FocusTimer
         const string DefaultBase = "https://raw.githubusercontent.com/hojung1231/focus-timer/main/download/";
         public const string PageUrl = "https://github.com/hojung1231/focus-timer";
 
-        static string Base => Environment.GetEnvironmentVariable("FOCUSTIMER_UPDATE_BASE") ?? DefaultBase;
+        // GitHub API: 캐시가 거의 없어 배포 직후에도 바로 새 버전이 보임 (raw 주소는 최대 5분 캐시)
+        const string ApiBase = "https://api.github.com/repos/hojung1231/focus-timer/contents/download/";
+
+        /// <summary>새 버전 정보를 받아 올 주소들 (앞에서부터 시도)</summary>
+        static string[] Sources
+        {
+            get
+            {
+                var test = Environment.GetEnvironmentVariable("FOCUSTIMER_UPDATE_BASE");
+                return test != null ? new[] { test } : new[] { ApiBase, DefaultBase };
+            }
+        }
+
+        static Uri UrlFor(string source, string file) =>
+            source == ApiBase
+                ? new Uri(source + file + "?ref=main")
+                : new Uri(source + file + "?t=" + DateTime.UtcNow.Ticks);
 
         public static readonly Version Current = Norm(Assembly.GetExecutingAssembly().GetName().Version);
         public static Version Latest { get; private set; }
@@ -42,6 +58,8 @@ namespace FocusTimer
             var wc = new WebClient { Encoding = System.Text.Encoding.UTF8 };
             wc.Headers[HttpRequestHeader.UserAgent] = "FocusTimer-Updater";
             wc.Headers[HttpRequestHeader.CacheControl] = "no-cache";
+            wc.Headers[HttpRequestHeader.Accept] = "application/vnd.github.raw"; // API에서 파일 내용 그대로
+            wc.CachePolicy = new System.Net.Cache.RequestCachePolicy(System.Net.Cache.RequestCacheLevel.NoCacheNoStore);
             return wc;
         }
 
@@ -61,9 +79,19 @@ namespace FocusTimer
             busy = true;
             try
             {
-                string txt;
-                using (var wc = NewClient())
-                    txt = await wc.DownloadStringTaskAsync(new Uri(Base + "version.txt?t=" + DateTime.UtcNow.Ticks));
+                string txt = null;
+                Exception last = null;
+                foreach (var src in Sources)
+                {
+                    try
+                    {
+                        using (var wc = NewClient())
+                            txt = await wc.DownloadStringTaskAsync(UrlFor(src, "version.txt"));
+                        if (txt != null && txt.Trim().Length > 0) break;
+                    }
+                    catch (Exception ex) { last = ex; txt = null; }
+                }
+                if (txt == null) throw last ?? new WebException("no source");
                 var lines = txt.Replace("\r", "").Split('\n');
                 Latest = Norm(Version.Parse(lines[0].Trim()));
                 latestSha = lines.Length > 1 ? lines[1].Trim().ToLowerInvariant() : "";
@@ -83,30 +111,41 @@ namespace FocusTimer
             string oldPath = exe + ".old";
 
             try { if (File.Exists(newPath)) File.Delete(newPath); } catch { }
-            using (var wc = NewClient())
+            Exception last = null;
+            bool got = false;
+            foreach (var src in Sources)
             {
-                wc.DownloadProgressChanged += (o, e) => progress?.Invoke(e.ProgressPercentage);
-                await wc.DownloadFileTaskAsync(new Uri(Base + "FocusTimer.exe?t=" + DateTime.UtcNow.Ticks), newPath);
+                try
+                {
+                    using (var wc = NewClient())
+                    {
+                        wc.DownloadProgressChanged += (o, e) => progress?.Invoke(e.ProgressPercentage);
+                        await wc.DownloadFileTaskAsync(UrlFor(src, "FocusTimer.exe"), newPath);
+                    }
+                    if (string.IsNullOrEmpty(latestSha) || Sha256(newPath) == latestSha) { got = true; break; }
+                    last = new InvalidDataException("받은 파일이 올바르지 않아요 (검증 실패). 잠시 후 다시 시도해 주세요.");
+                }
+                catch (Exception ex) { last = ex; }
+            }
+            if (!got)
+            {
+                try { if (File.Exists(newPath)) File.Delete(newPath); } catch { }
+                throw last ?? new WebException("download failed");
             }
 
-            if (!string.IsNullOrEmpty(latestSha))
-            {
-                string sha;
-                using (var f = File.OpenRead(newPath))
-                using (var h = SHA256.Create())
-                    sha = BitConverter.ToString(h.ComputeHash(f)).Replace("-", "").ToLowerInvariant();
-                if (sha != latestSha)
-                {
-                    File.Delete(newPath);
-                    throw new InvalidDataException("받은 파일이 올바르지 않아요 (검증 실패). 잠시 후 다시 시도해 주세요.");
-                }
-            }
 
             // 실행 중인 exe는 덮어쓸 수 없지만 이름은 바꿀 수 있음 → 바꿔치기
             if (File.Exists(oldPath)) File.Delete(oldPath);
             File.Move(exe, oldPath);
             try { File.Move(newPath, exe); }
             catch { File.Move(oldPath, exe); throw; }
+        }
+
+        static string Sha256(string path)
+        {
+            using (var f = File.OpenRead(path))
+            using (var h = SHA256.Create())
+                return BitConverter.ToString(h.ComputeHash(f)).Replace("-", "").ToLowerInvariant();
         }
 
         /// <summary>앱이 완전히 닫힌 뒤 새 exe 실행</summary>
