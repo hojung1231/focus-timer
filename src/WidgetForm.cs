@@ -15,7 +15,9 @@ namespace FocusTimer
         protected readonly int BannerH, Pad, Gap, BtnW, ColW, BoxH, TimerH;
         protected readonly Panel Banner;
         protected readonly ToolTip Tip = new ToolTip();
-        readonly Label minBtn, closeBtn, updateBtn;
+        readonly Label minBtn, closeBtn, updateBtn, gearBtn;
+        readonly ContextMenuStrip menu = new ContextMenuStrip();
+        readonly Timer hoverTimer;
         readonly List<Label> leftItems = new List<Label>();
         int lastWidth, lastContentH;
         string updateProgress;   // 업데이트 받는 중이면 진행률 글자
@@ -45,7 +47,7 @@ namespace FocusTimer
             BannerH = (int)(15 * S);
             Pad = Math.Max(1, (int)(2 * S));
             Gap = Math.Max(1, (int)(1 * S));
-            BtnW = (int)(17 * S);
+            BtnW = (int)(16 * S);
 
             Banner = new Panel { BackColor = Theme.BannerBg };
             Banner.MouseDown += DragWindow;
@@ -77,8 +79,53 @@ namespace FocusTimer
             updateBtn.Click += (o, e) => { if (updateProgress == null) UpdateRequested?.Invoke(); };
             Banner.Controls.Add(updateBtn);
 
-            // 배너 우클릭: 업데이트 확인 / 버전 정보
-            var menu = new ContextMenuStrip();
+            // ⚙ 옵션 버튼 (배너 우클릭과 같은 메뉴)
+            gearBtn = MakeBannerButton("⚙", Theme.BannerHover, true);
+            gearBtn.Font = new Font("Segoe UI Symbol", 7f);
+            gearBtn.Click += (o, e) => menu.Show(gearBtn, new Point(0, BannerH));
+            Banner.Controls.Add(gearBtn);
+            Tip.SetToolTip(gearBtn, "옵션 (투명도, 표시 개수)");
+
+            menu.Opening += (o, e) => BuildMenu();
+            Banner.ContextMenuStrip = menu;
+
+            Updater.Changed += RefreshUpdateButton;
+            Settings.Changed += ApplyOpacity;
+
+            // 마우스를 올리면 선명하게
+            hoverTimer = new Timer { Interval = 150 };
+            hoverTimer.Tick += (o, e) => ApplyOpacity();
+            hoverTimer.Start();
+        }
+
+        // ── 옵션 메뉴 ─────────────────────────────────────
+        void BuildMenu()
+        {
+            menu.Items.Clear();
+
+            var trans = new ToolStripMenuItem($"투명도 ({Settings.Transparency}%)");
+            foreach (int v in Settings.TransparencyChoices)
+            {
+                int val = v;
+                trans.DropDownItems.Add(new ToolStripMenuItem(v == 0 ? "0% (불투명)" : v + "%", null,
+                    (o, e) => Settings.SetTransparency(val)) { Checked = Settings.Transparency == v });
+            }
+            menu.Items.Add(trans);
+
+            var count = new ToolStripMenuItem($"표시할 작업 수 ({Settings.MaxItems}개)");
+            foreach (int v in Settings.MaxItemsChoices)
+            {
+                int val = v;
+                count.DropDownItems.Add(new ToolStripMenuItem(v + "개", null,
+                    (o, e) => Settings.SetMaxItems(val)) { Checked = Settings.MaxItems == v });
+            }
+            count.ToolTipText = "자동 감지에서 많이 한 순서대로 몇 개까지 보여줄지";
+            menu.Items.Add(count);
+
+            menu.Items.Add(new ToolStripMenuItem("마우스를 올리면 선명하게", null,
+                (o, e) => Settings.SetHoverOpaque(!Settings.HoverOpaque)) { Checked = Settings.HoverOpaque });
+
+            menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("업데이트 확인", null, async (o, e) =>
             {
                 bool ok = await Updater.CheckAsync();
@@ -88,20 +135,33 @@ namespace FocusTimer
             menu.Items.Add("다운로드 페이지 열기", null, (o, e) => Updater.OpenPage());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem($"버전 v{Updater.Text(Updater.Current)}") { Enabled = false });
-            Banner.ContextMenuStrip = menu;
+        }
 
-            Updater.Changed += RefreshUpdateButton;
+        void ApplyOpacity()
+        {
+            if (IsDisposed) return;
+            double target = Settings.Opacity;
+            if (Settings.HoverOpaque && (Bounds.Contains(Cursor.Position) || menu.Visible))
+                target = 1.0;
+            if (Math.Abs(Opacity - target) > 0.001) Opacity = target;
         }
 
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
             RefreshUpdateButton();
+            ApplyOpacity();
         }
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) Updater.Changed -= RefreshUpdateButton;
+            if (disposing)
+            {
+                Updater.Changed -= RefreshUpdateButton;
+                Settings.Changed -= ApplyOpacity;
+                hoverTimer.Stop();
+                hoverTimer.Dispose();
+            }
             base.Dispose(disposing);
         }
 
@@ -199,12 +259,12 @@ namespace FocusTimer
 
             int leftTotal = 0;
             foreach (var l in leftItems) leftTotal += l.Width;
-            int rightLimit = width - 2 * BtnW;
+            int rightLimit = width - 3 * BtnW;
             if (updateBtn.Visible)
             {
                 // 자리가 있으면 "⬆ 업데이트", 좁으면 "⬆"만
                 int wide = (int)(50 * S);
-                bool roomy = width - 2 * BtnW - leftTotal >= wide;
+                bool roomy = width - 3 * BtnW - leftTotal >= wide;
                 int uw = roomy ? wide : BtnW;
                 updateBtn.Text = updateProgress ?? (roomy ? "⬆ 업데이트" : "⬆");
                 if (updateProgress != null) uw = Math.Max(uw, (int)(36 * S));
@@ -220,6 +280,7 @@ namespace FocusTimer
             }
             closeBtn.Bounds = new Rectangle(width - BtnW, 0, BtnW, BannerH);
             minBtn.Bounds = new Rectangle(width - 2 * BtnW, 0, BtnW, BannerH);
+            gearBtn.Bounds = new Rectangle(width - 3 * BtnW, 0, BtnW, BannerH);
             Invalidate();
         }
 

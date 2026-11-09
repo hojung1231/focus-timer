@@ -15,7 +15,6 @@ namespace FocusTimer
     {
         public override int ModeId => 2;
 
-        const int MaxBoxes = 3;            // 화면에 보여줄 작업 수
         const double MinShowSeconds = 5;   // 잠깐 스친 창은 목록에 안 보이게
         const double IdleLimit = InputIdle.Limit; // 30초 동안 입력이 없으면 자리 비움
 
@@ -67,6 +66,8 @@ namespace FocusTimer
 
             EnsureBoxCount(1);
             UpdateUI();
+
+            Settings.Changed += OnSettingsChanged;
 
             tick = new Timer { Interval = 1000 };
             tick.Tick += (o, e) => Tick();
@@ -205,7 +206,7 @@ namespace FocusTimer
                 .OrderByDescending(i => i.Seconds)
                 .ThenByDescending(i => i.LastActive)
                 .ToList();
-            var vis = ranked.Take(MaxBoxes).ToList();
+            var vis = ranked.Take(Settings.MaxItems).ToList();   // 옵션: 기본 3개
             if (current != null && ranked.Contains(current) && !vis.Contains(current))
                 vis[vis.Count - 1] = current;   // 돌아갈 작업이 밀려나지 않게
             return vis;
@@ -326,8 +327,14 @@ namespace FocusTimer
             try { Process.Start("notepad.exe", "\"" + DistractionRules.FilePath + "\""); } catch { }
         }
 
+        void OnSettingsChanged()
+        {
+            if (!IsDisposed) UpdateUI();
+        }
+
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            Settings.Changed -= OnSettingsChanged;
             tick.Stop();
             base.OnFormClosing(e);
         }
