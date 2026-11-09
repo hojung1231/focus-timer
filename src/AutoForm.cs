@@ -200,19 +200,13 @@ namespace FocusTimer
         }
 
         // ── 화면 ──────────────────────────────────────────
-        /// <summary>투자 시간이 많은 작업부터 왼쪽에 (지금 하던 작업은 항상 포함)</summary>
-        List<WorkItem> VisibleItems()
-        {
-            var ranked = items
-                .Where(i => i == current || i.Seconds >= MinShowSeconds)
-                .OrderByDescending(i => i.Seconds)
-                .ThenByDescending(i => i.LastActive)
-                .ToList();
-            var vis = ranked.Take(Settings.MaxItems).ToList();   // 옵션: 기본 3개
-            if (current != null && ranked.Contains(current) && !vis.Contains(current))
-                vis[vis.Count - 1] = current;   // 돌아갈 작업이 밀려나지 않게
-            return vis;
-        }
+        /// <summary>총 사용 시간 1위부터 왼쪽에 (옵션 개수만큼, 기본 3개)</summary>
+        List<WorkItem> VisibleItems() => items
+            .Where(i => i.Seconds >= MinShowSeconds || i == current)
+            .OrderByDescending(i => i.Seconds)
+            .ThenByDescending(i => i.LastActive)
+            .Take(Settings.MaxItems)
+            .ToList();
 
         protected override void OnRescale()
         {
