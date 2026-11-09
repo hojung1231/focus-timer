@@ -33,6 +33,10 @@ namespace FocusTimer
         public static readonly Color TimerAway = Color.FromArgb(253, 214, 99);
         public static readonly Color Hint = Color.FromArgb(128, 134, 139);
 
+        /// <summary>창 크기 배율이 적용된 글꼴 (pt는 기본 크기 기준)</summary>
+        public static System.Drawing.Font Font(string family, float pt, FontStyle style = FontStyle.Regular) =>
+            new System.Drawing.Font(family, System.Math.Max(4f, pt * Settings.Scale), style);
+
         public static GraphicsPath Rounded(Rectangle r, int rad)
         {
             var p = new GraphicsPath();

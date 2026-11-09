@@ -22,12 +22,12 @@ namespace FocusTimer
 
         public ManualForm() : base(showHome: true)
         {
-            var add = AddBannerItem("+", BtnW, "오른쪽에 새 업무 추가", true);
+            var add = AddBannerItem("+", 16, "오른쪽에 새 업무 추가", true);
             add.Click += (o, e) => AddTask(focus: true);
 
             // ↺ 초기화: 시간만 0으로 / 업무 모두 지우기
-            var reset = AddBannerItem("↺", BtnW, "초기화", true);
-            reset.Font = new Font("Segoe UI Symbol", 7.5f, FontStyle.Bold);
+            var reset = AddBannerItem("↺", 16, "초기화", true);
+            SetBannerFont(reset, "Segoe UI Symbol", 7.5f, FontStyle.Bold);
             var resetMenu = new ContextMenuStrip();
             resetMenu.Items.Add("모든 업무 시간만 0으로", null, (o, e) => ResetAllTimes());
             resetMenu.Items.Add("업무 모두 지우기", null, (o, e) => ClearAllTasks());
@@ -66,6 +66,12 @@ namespace FocusTimer
                 var t = tasks.FirstOrDefault(x => x.AutoPaused);
                 if (t != null) t.Resume();
             }
+        }
+
+        protected override void OnRescale()
+        {
+            foreach (var t in tasks) t.Rescale(S, ColW, BoxH, Gap, TimerH);
+            LayoutAll();
         }
 
         void ResetAllTimes()
@@ -204,9 +210,9 @@ namespace FocusTimer
         long accTicks;
         readonly Stopwatch sw = new Stopwatch();
         readonly TextBox editor;
-        readonly float s;
-        readonly int ip;
-        readonly Font textFont, timerFont, hintFont;
+        float s;
+        int ip;
+        Font textFont, timerFont, hintFont;
 
         public Rectangle BoxRect, TimerRect;
 
@@ -220,18 +226,9 @@ namespace FocusTimer
 
         public TaskBox(float scale, int w, int boxH, int gap, int timerH)
         {
-            s = scale;
-            ip = (int)(4 * s);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             BackColor = Theme.FormBg;
-            Size = new Size(w, boxH + gap + timerH);
-            BoxRect = new Rectangle(0, 0, w, boxH);
-            TimerRect = new Rectangle(0, boxH + gap, w, timerH);
-
-            textFont = new Font("Malgun Gothic", 7.5f, FontStyle.Bold);
-            timerFont = new Font("Consolas", 7.5f, FontStyle.Bold);
-            hintFont = new Font("Malgun Gothic", 6.5f);
 
             editor = new TextBox
             {
@@ -241,11 +238,10 @@ namespace FocusTimer
                 BorderStyle = BorderStyle.None,
                 ScrollBars = ScrollBars.None,
                 TextAlign = HorizontalAlignment.Center,
-                Font = textFont,
                 BackColor = Theme.EditBg,
                 ForeColor = Color.Black,
-                Bounds = new Rectangle(ip, ip + (int)(2 * s), w - 2 * ip, boxH - 2 * ip - (int)(2 * s)),
             };
+            Rescale(scale, w, boxH, gap, timerH);
             editor.KeyDown += Editor_KeyDown;
             editor.Leave += (o, e) =>
             {
@@ -262,6 +258,26 @@ namespace FocusTimer
             ContextMenuStrip = menu;
 
             ShowEditor(false);
+        }
+
+        /// <summary>창 크기 배율이 바뀌면 박스·글꼴 다시 계산</summary>
+        public void Rescale(float scale, int w, int boxH, int gap, int timerH)
+        {
+            s = scale;
+            ip = (int)(4 * s);
+            Size = new Size(w, boxH + gap + timerH);
+            BoxRect = new Rectangle(0, 0, w, boxH);
+            TimerRect = new Rectangle(0, boxH + gap, w, timerH);
+
+            var oldText = textFont;
+            textFont = Theme.Font("Malgun Gothic", 7.5f, FontStyle.Bold);
+            timerFont?.Dispose(); hintFont?.Dispose();
+            timerFont = Theme.Font("Consolas", 7.5f, FontStyle.Bold);
+            hintFont = Theme.Font("Malgun Gothic", 6.5f);
+            editor.Font = textFont;
+            oldText?.Dispose();
+            editor.Bounds = new Rectangle(ip, ip + (int)(2 * s), w - 2 * ip, boxH - 2 * ip - (int)(2 * s));
+            Invalidate();
         }
 
         public TimeSpan Elapsed => new TimeSpan(accTicks + (Running ? sw.Elapsed.Ticks : 0));

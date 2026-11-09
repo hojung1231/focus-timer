@@ -10,38 +10,45 @@ namespace FocusTimer
         public override int ModeId => 0;
 
         public event Action<int> ModeChosen;
+        readonly OptionCard c1, c2;
 
         public HomeForm() : base(showHome: false)
         {
-            AddBannerItem(" 업무 집중 타이머", (int)(80 * S), null, false);
+            AddBannerItem(" 업무 집중 타이머", 80, null, false);
 
-            var c1 = new OptionCard(S, 1, "직접 기록", "업무를 입력하고\n직접 시작 · 정지");
-            var c2 = new OptionCard(S, 2, "자동 감지", "하는 작업을 알아서 기록\n딴짓하면 버튼 하나로 복귀");
+            c1 = new OptionCard(S, 1, "직접 기록", "업무를 입력하고\n직접 시작 · 정지");
+            c2 = new OptionCard(S, 2, "자동 감지", "하는 작업을 알아서 기록\n딴짓하면 버튼 하나로 복귀");
             Tip.SetToolTip(c1, "업무를 입력하고 직접 시작 · 정지");
             Tip.SetToolTip(c2, "하는 작업을 알아서 기록, 딴짓하면 버튼 하나로 복귀");
             c1.Click += (o, e) => BeginInvoke((Action)(() => ModeChosen?.Invoke(1)));
             c2.Click += (o, e) => BeginInvoke((Action)(() => ModeChosen?.Invoke(2)));
 
+            Controls.Add(c1);
+            Controls.Add(c2);
+            OnRescale();
+        }
+
+        protected override void OnRescale()
+        {
+            c1.Rescale(S);
+            c2.Rescale(S);
             int w = Pad + 2 * (ColW + Pad);
             c1.Bounds = new Rectangle(Pad, BannerH + Pad, ColW, BoxH);
             c2.Bounds = new Rectangle(Pad * 2 + ColW, BannerH + Pad, ColW, BoxH);
-            Controls.Add(c1);
-            Controls.Add(c2);
             SetContentSize(w, Pad + BoxH + Pad);
         }
     }
 
     class OptionCard : Control
     {
-        readonly float s;
+        float s;
         readonly int number;
         readonly string title, desc;
-        readonly Font numFont, titleFont, descFont;
+        Font numFont, titleFont, descFont;
         bool hover;
 
         public OptionCard(float scale, int number, string title, string desc)
         {
-            s = scale;
             this.number = number;
             this.title = title;
             this.desc = desc;
@@ -49,9 +56,17 @@ namespace FocusTimer
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             BackColor = Theme.FormBg;
             Cursor = Cursors.Hand;
-            numFont = new Font("Consolas", 6f, FontStyle.Bold);
-            titleFont = new Font("Malgun Gothic", 8.5f, FontStyle.Bold);
-            descFont = new Font("Malgun Gothic", 8f);
+            Rescale(scale);
+        }
+
+        public void Rescale(float scale)
+        {
+            s = scale;
+            numFont?.Dispose(); titleFont?.Dispose(); descFont?.Dispose();
+            numFont = Theme.Font("Consolas", 6f, FontStyle.Bold);
+            titleFont = Theme.Font("Malgun Gothic", 8.5f, FontStyle.Bold);
+            descFont = Theme.Font("Malgun Gothic", 8f);
+            Invalidate();
         }
 
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }

@@ -28,7 +28,7 @@ namespace FocusTimer
         readonly Timer tick;
         readonly Stopwatch clock = Stopwatch.StartNew();
         readonly int myPid = Process.GetCurrentProcess().Id;
-        readonly int stripH;
+        int StripH => (int)(15 * S);
 
         Mode mode = Mode.Starting, modeBeforeIdle = Mode.Starting;
         WorkItem current;                 // 마지막으로 하던 업무 (돌아갈 곳)
@@ -50,11 +50,10 @@ namespace FocusTimer
 
         public AutoForm() : base(showHome: true)
         {
-            var reset = AddBannerItem("↺", BtnW, "기록 초기화", true);
-            reset.Font = new Font("Segoe UI Symbol", 7.5f, FontStyle.Bold);
+            var reset = AddBannerItem("↺", 16, "기록 초기화", true);
+            SetBannerFont(reset, "Segoe UI Symbol", 7.5f, FontStyle.Bold);
             reset.Click += (o, e) => ResetAll();
-            AddBannerItem(" 자동", (int)(34 * S), null, false);
-            stripH = (int)(15 * S);
+            AddBannerItem(" 자동", 34, null, false);
 
             bool demo = Environment.GetEnvironmentVariable("FOCUSTIMER_DEMO") == "1" &&
                         Environment.OSVersion.Platform != PlatformID.Win32NT;
@@ -215,6 +214,13 @@ namespace FocusTimer
             return vis;
         }
 
+        protected override void OnRescale()
+        {
+            foreach (var b in boxes) b.Rescale(S, ColW, BoxH, Gap, TimerH);
+            bar.Rescale(S);
+            LayoutBoxes();
+        }
+
         void EnsureBoxCount(int n)
         {
             if (n == boxes.Count) return;
@@ -237,12 +243,18 @@ namespace FocusTimer
                 b.Dispose();
             }
 
+            LayoutBoxes();
+            if (placed) KeepCenter(cx);
+        }
+
+        void LayoutBoxes()
+        {
+            int n = boxes.Count;
             int w = Pad + n * (ColW + Pad);
-            SetContentSize(w, Pad + BoxH + Gap + TimerH + Pad + stripH + Pad);
+            SetContentSize(w, Pad + BoxH + Gap + TimerH + Pad + StripH + Pad);
             for (int i = 0; i < n; i++)
                 boxes[i].Location = new Point(Pad + i * (ColW + Pad), BannerH + Pad);
-            bar.Bounds = new Rectangle(Pad, BannerH + Pad + BoxH + Gap + TimerH + Pad, w - 2 * Pad, stripH);
-            if (placed) KeepCenter(cx);
+            bar.Bounds = new Rectangle(Pad, BannerH + Pad + BoxH + Gap + TimerH + Pad, w - 2 * Pad, StripH);
         }
 
         void UpdateUI()
@@ -363,25 +375,32 @@ namespace FocusTimer
         public bool IsCurrent, IsReturnTarget;
         bool hover;
 
-        readonly float s;
-        readonly int ip;
-        readonly Rectangle boxRect, timerRect;
-        readonly Font nameFont, appFont, timerFont, hintFont;
+        float s;
+        int ip;
+        Rectangle boxRect, timerRect;
+        Font nameFont, appFont, timerFont, hintFont;
 
         public WorkBox(float scale, int w, int boxH, int gap, int timerH)
         {
-            s = scale;
-            ip = (int)(4 * s);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             BackColor = Theme.FormBg;
+            Rescale(scale, w, boxH, gap, timerH);
+        }
+
+        public void Rescale(float scale, int w, int boxH, int gap, int timerH)
+        {
+            s = scale;
+            ip = (int)(4 * s);
             Size = new Size(w, boxH + gap + timerH);
             boxRect = new Rectangle(0, 0, w, boxH);
             timerRect = new Rectangle(0, boxH + gap, w, timerH);
-            nameFont = new Font("Malgun Gothic", 7.5f, FontStyle.Bold);
-            appFont = new Font("Malgun Gothic", 6f, FontStyle.Bold);
-            timerFont = new Font("Consolas", 7.5f, FontStyle.Bold);
-            hintFont = new Font("Malgun Gothic", 6.5f);
+            nameFont?.Dispose(); appFont?.Dispose(); timerFont?.Dispose(); hintFont?.Dispose();
+            nameFont = Theme.Font("Malgun Gothic", 7.5f, FontStyle.Bold);
+            appFont = Theme.Font("Malgun Gothic", 6f, FontStyle.Bold);
+            timerFont = Theme.Font("Consolas", 7.5f, FontStyle.Bold);
+            hintFont = Theme.Font("Malgun Gothic", 6.5f);
+            Invalidate();
         }
 
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
@@ -448,8 +467,8 @@ namespace FocusTimer
     /// <summary>아래쪽 상태 줄 (딴짓 중이면 "돌아가기" 버튼이 됨)</summary>
     class StateBar : Control
     {
-        readonly float s;
-        readonly Font font;
+        float s;
+        Font font;
         string text = "";
         Color bg = Theme.TimerBg, fg = Theme.Hint;
         bool clickable, hover;
@@ -460,7 +479,15 @@ namespace FocusTimer
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             BackColor = Theme.FormBg;
-            font = new Font("Malgun Gothic", 6.5f, FontStyle.Bold);
+            Rescale(scale);
+        }
+
+        public void Rescale(float scale)
+        {
+            s = scale;
+            font?.Dispose();
+            font = Theme.Font("Malgun Gothic", 6.5f, FontStyle.Bold);
+            Invalidate();
         }
 
         public void Set(string t, Color b, Color f, bool canClick)

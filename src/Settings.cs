@@ -23,6 +23,11 @@ namespace FocusTimer
         /// <summary>마우스를 올리면 잠깐 선명하게</summary>
         public static bool HoverOpaque { get; private set; } = true;
 
+        /// <summary>창 크기 배율 (1.0 = 기본). 글자·박스가 함께 커지고 작아짐</summary>
+        public static float Scale { get; private set; } = 1.0f;
+        public const float MinScale = 0.6f, MaxScale = 3.0f;
+        public static readonly int[] ScaleChoices = { 75, 100, 125, 150, 200, 300 };
+
         public static event Action Changed;
 
         public static double Opacity => 1.0 - Transparency / 100.0;
@@ -32,6 +37,14 @@ namespace FocusTimer
         public static void SetTransparency(int v) { Transparency = Math.Max(0, Math.Min(80, v)); SaveAndNotify(); }
         public static void SetMaxItems(int v) { MaxItems = Math.Max(1, Math.Min(5, v)); SaveAndNotify(); }
         public static void SetHoverOpaque(bool v) { HoverOpaque = v; SaveAndNotify(); }
+
+        /// <summary>save=false: 모서리를 끄는 동안 (손을 뗄 때 Save 호출)</summary>
+        public static void SetScale(float v, bool save = true)
+        {
+            Scale = Math.Max(MinScale, Math.Min(MaxScale, v));
+            if (save) Save();
+            Changed?.Invoke();
+        }
 
         static void SaveAndNotify()
         {
@@ -56,11 +69,14 @@ namespace FocusTimer
                     MaxItems = Math.Max(1, Math.Min(5, mv));
                 if (d.TryGetValue("hover_opaque", out var h) && bool.TryParse(h, out bool hv))
                     HoverOpaque = hv;
+                if (d.TryGetValue("scale", out var sc) &&
+                    float.TryParse(sc, NumberStyles.Float, CultureInfo.InvariantCulture, out float sv))
+                    Scale = Math.Max(MinScale, Math.Min(MaxScale, sv));
             }
             catch { }
         }
 
-        static void Save()
+        public static void Save()
         {
             try
             {
@@ -69,6 +85,7 @@ namespace FocusTimer
                 sb.Append("transparency=").Append(Transparency.ToString(CultureInfo.InvariantCulture)).Append("\r\n");
                 sb.Append("max_items=").Append(MaxItems.ToString(CultureInfo.InvariantCulture)).Append("\r\n");
                 sb.Append("hover_opaque=").Append(HoverOpaque ? "true" : "false").Append("\r\n");
+                sb.Append("scale=").Append(Scale.ToString("0.00", CultureInfo.InvariantCulture)).Append("\r\n");
                 File.WriteAllText(FilePath, sb.ToString());
             }
             catch { }
