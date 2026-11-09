@@ -39,13 +39,13 @@ namespace FocusTimer
             Icon = AppIcon;
 
             using (var g = CreateGraphics()) S = g.DpiX / 96f;
-            ColW = (int)Math.Round(2 * 96 * S);   // 가로 2인치
-            BoxH = (int)Math.Round(1 * 96 * S);   // 세로 1인치
-            TimerH = (int)(22 * S);
-            BannerH = (int)(20 * S);
-            Pad = (int)(3 * S);
-            Gap = (int)(2 * S);
-            BtnW = (int)(24 * S);
+            ColW = (int)Math.Round(1 * 96 * S);   // 가로 1인치
+            BoxH = (int)Math.Round(0.5 * 96 * S); // 세로 0.5인치
+            TimerH = (int)(14 * S);
+            BannerH = (int)(15 * S);
+            Pad = Math.Max(1, (int)(2 * S));
+            Gap = Math.Max(1, (int)(1 * S));
+            BtnW = (int)(17 * S);
 
             Banner = new Panel { BackColor = Theme.BannerBg };
             Banner.MouseDown += DragWindow;
@@ -55,7 +55,7 @@ namespace FocusTimer
             if (showHome)
             {
                 var home = AddBannerItem("⌂", BtnW, "홈 (버전 선택)", true);
-                home.Font = new Font("Segoe UI Symbol", 9.5f, FontStyle.Bold);
+                home.Font = new Font("Segoe UI Symbol", 7f, FontStyle.Bold);
                 home.Click += (o, e) => BeginInvoke((Action)(() => HomeRequested?.Invoke())); // 클릭 처리 후 전환
             }
 
@@ -151,7 +151,7 @@ namespace FocusTimer
                 TextAlign = ContentAlignment.MiddleCenter,
                 ForeColor = Theme.BannerFg,
                 BackColor = Theme.BannerBg,
-                Font = new Font("Malgun Gothic", 8.5f, FontStyle.Bold),
+                Font = new Font("Malgun Gothic", 6.5f, FontStyle.Bold),
             };
             if (clickable)
             {
@@ -181,7 +181,7 @@ namespace FocusTimer
             {
                 l.TextAlign = ContentAlignment.MiddleLeft;
                 l.ForeColor = Theme.SubFg;
-                l.Font = new Font("Malgun Gothic", 8f);
+                l.Font = new Font("Malgun Gothic", 6.5f);
             }
             if (tip != null) Tip.SetToolTip(l, tip);
             leftItems.Add(l);
@@ -203,11 +203,11 @@ namespace FocusTimer
             if (updateBtn.Visible)
             {
                 // 자리가 있으면 "⬆ 업데이트", 좁으면 "⬆"만
-                int wide = (int)(68 * S);
+                int wide = (int)(50 * S);
                 bool roomy = width - 2 * BtnW - leftTotal >= wide;
                 int uw = roomy ? wide : BtnW;
                 updateBtn.Text = updateProgress ?? (roomy ? "⬆ 업데이트" : "⬆");
-                if (updateProgress != null) uw = Math.Max(uw, (int)(52 * S));
+                if (updateProgress != null) uw = Math.Max(uw, (int)(36 * S));
                 updateBtn.Bounds = new Rectangle(rightLimit - uw, 0, uw, BannerH);
                 rightLimit -= uw;
             }

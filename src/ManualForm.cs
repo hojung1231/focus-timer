@@ -22,7 +22,7 @@ namespace FocusTimer
 
         public ManualForm() : base(showHome: true)
         {
-            var add = AddBannerItem("+ 새 업무", (int)(64 * S), "오른쪽에 새 업무 추가", true);
+            var add = AddBannerItem("+", BtnW, "오른쪽에 새 업무 추가", true);
             add.Click += (o, e) => AddTask(focus: true);
 
             LoadTasks();
@@ -188,7 +188,7 @@ namespace FocusTimer
         public TaskBox(float scale, int w, int boxH, int gap, int timerH)
         {
             s = scale;
-            ip = (int)(8 * s);
+            ip = (int)(4 * s);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             BackColor = Theme.FormBg;
@@ -196,9 +196,9 @@ namespace FocusTimer
             BoxRect = new Rectangle(0, 0, w, boxH);
             TimerRect = new Rectangle(0, boxH + gap, w, timerH);
 
-            textFont = new Font("Malgun Gothic", 11f, FontStyle.Bold);
-            timerFont = new Font("Consolas", 10.5f, FontStyle.Bold);
-            hintFont = new Font("Malgun Gothic", 8f);
+            textFont = new Font("Malgun Gothic", 7.5f, FontStyle.Bold);
+            timerFont = new Font("Consolas", 7.5f, FontStyle.Bold);
+            hintFont = new Font("Malgun Gothic", 6.5f);
 
             editor = new TextBox
             {
@@ -211,7 +211,7 @@ namespace FocusTimer
                 Font = textFont,
                 BackColor = Theme.EditBg,
                 ForeColor = Color.Black,
-                Bounds = new Rectangle(ip, ip + (int)(4 * s), w - 2 * ip, boxH - 2 * ip - (int)(4 * s)),
+                Bounds = new Rectangle(ip, ip + (int)(2 * s), w - 2 * ip, boxH - 2 * ip - (int)(2 * s)),
             };
             editor.KeyDown += Editor_KeyDown;
             editor.Leave += (o, e) =>
@@ -381,7 +381,7 @@ namespace FocusTimer
             int w = Math.Min(sz.Width, inner.Width);
             int h = Math.Min(sz.Height, inner.Height);
             var r = new Rectangle(inner.X + (inner.Width - w) / 2, inner.Y + (inner.Height - h) / 2, w, h);
-            return Rectangle.Inflate(r, (int)(3 * s), (int)(2 * s));
+            return Rectangle.Inflate(r, (int)(2 * s), (int)(1 * s));
         }
 
         protected override void OnMouseClick(MouseEventArgs e)
@@ -416,7 +416,7 @@ namespace FocusTimer
             var g = e.Graphics;
             g.Clear(BackColor);
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            int rad = (int)(6 * s);
+            int rad = (int)(4 * s);
 
             // 업무 박스
             var box = new Rectangle(BoxRect.X, BoxRect.Y, BoxRect.Width - 1, BoxRect.Height - 1);
@@ -437,11 +437,11 @@ namespace FocusTimer
                          TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
             if (!HasStarted)
             {
-                TextRenderer.DrawText(g, "업무 입력 후 Enter", hintFont, TimerRect, Theme.Hint, cflags);
+                TextRenderer.DrawText(g, "입력 후 Enter", hintFont, TimerRect, Theme.Hint, cflags);
             }
             else
             {
-                string str = (Running ? "● " : AutoPaused ? "자리 비움 " : "‖ ") + Theme.Fmt(Elapsed);
+                string str = (Running ? "● " : AutoPaused ? "자리비움 " : "‖ ") + (AutoPaused ? Theme.FmtShort(Elapsed) : Theme.Fmt(Elapsed));
                 Color c = Running ? Theme.TimerRunning : AutoPaused ? Theme.TimerAway : Theme.TimerPaused;
                 TextRenderer.DrawText(g, str, timerFont, TimerRect, c, cflags);
             }

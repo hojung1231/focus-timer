@@ -13,10 +13,12 @@ namespace FocusTimer
 
         public HomeForm() : base(showHome: false)
         {
-            AddBannerItem(" 업무 집중 타이머", (int)(120 * S), null, false);
+            AddBannerItem(" 업무 집중 타이머", (int)(80 * S), null, false);
 
             var c1 = new OptionCard(S, 1, "직접 기록", "업무를 입력하고\n직접 시작 · 정지");
             var c2 = new OptionCard(S, 2, "자동 감지", "하는 작업을 알아서 기록\n딴짓하면 버튼 하나로 복귀");
+            Tip.SetToolTip(c1, "업무를 입력하고 직접 시작 · 정지");
+            Tip.SetToolTip(c2, "하는 작업을 알아서 기록, 딴짓하면 버튼 하나로 복귀");
             c1.Click += (o, e) => BeginInvoke((Action)(() => ModeChosen?.Invoke(1)));
             c2.Click += (o, e) => BeginInvoke((Action)(() => ModeChosen?.Invoke(2)));
 
@@ -47,8 +49,8 @@ namespace FocusTimer
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             BackColor = Theme.FormBg;
             Cursor = Cursors.Hand;
-            numFont = new Font("Consolas", 8.5f, FontStyle.Bold);
-            titleFont = new Font("Malgun Gothic", 12f, FontStyle.Bold);
+            numFont = new Font("Consolas", 6f, FontStyle.Bold);
+            titleFont = new Font("Malgun Gothic", 8.5f, FontStyle.Bold);
             descFont = new Font("Malgun Gothic", 8f);
         }
 
@@ -62,20 +64,17 @@ namespace FocusTimer
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             Color bg = hover ? (number == 1 ? Theme.PausedHover : Color.FromArgb(36, 160, 74))
                              : (number == 1 ? Theme.PausedBg : Theme.RunningBg);
-            Theme.FillRounded(g, ClientRectangle, (int)(6 * s), bg);
+            Theme.FillRounded(g, ClientRectangle, (int)(4 * s), bg);
 
-            int ip = (int)(8 * s);
+            int ip = (int)(5 * s);
             var r = Rectangle.Inflate(ClientRectangle, -ip, -ip);
             TextRenderer.DrawText(g, "VER " + number, numFont, r, Color.FromArgb(200, 255, 255, 255),
                 TextFormatFlags.Left | TextFormatFlags.Top);
 
-            var titleRect = new Rectangle(r.X, r.Y + (int)(13 * s), r.Width, (int)(24 * s));
+            var titleRect = new Rectangle(r.X, r.Y + (int)(10 * s), r.Width, r.Bottom - r.Y - (int)(10 * s));
             TextRenderer.DrawText(g, title, titleFont, titleRect, Color.White,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
 
-            var descRect = new Rectangle(r.X, titleRect.Bottom + (int)(2 * s), r.Width, r.Bottom - titleRect.Bottom);
-            TextRenderer.DrawText(g, desc, descFont, descRect, Color.FromArgb(225, 255, 255, 255),
-                TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
         }
 
         protected override void Dispose(bool disposing)
