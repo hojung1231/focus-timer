@@ -1,0 +1,425 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Text;
+using System.Windows.Forms;
+
+namespace FocusTimer
+{
+    /// <summary>버전 1: 직접 입력하고 직접 시작·정지</summary>
+    class ManualForm : WidgetForm
+    {
+        readonly List<TaskBox> tasks = new List<TaskBox>();
+        readonly Timer tick;
+        int saveCounter;
+
+        static readonly string SavePath = Path.Combine(Storage.Dir, "tasks.txt");
+
+        public ManualForm() : base(showHome: true)
+        {
+            var add = AddBannerItem("+ 새 업무", (int)(78 * S), "오른쪽에 새 업무 추가", true);
+            add.Click += (o, e) => AddTask(focus: true);
+
+            LoadTasks();
+            if (tasks.Count == 0) AddTask(focus: false, keepCenter: false);
+            LayoutAll();
+
+            tick = new Timer { Interval = 250 };
+            tick.Tick += (o, e) =>
+            {
+                foreach (var t in tasks) if (t.Running) t.InvalidateTimer();
+                if (++saveCounter >= 240) { saveCounter = 0; SaveTasks(); } // 1분마다 자동 저장
+            };
+            tick.Start();
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            if (!tasks[0].HasStarted) tasks[0].BeginEdit();
+        }
+
+        TaskBox AddTask(bool focus, bool keepCenter = true)
+        {
+            int cx = CenterX;
+            var t = new TaskBox(S, ColW, BoxH, Gap, TimerH);
+            t.RunStarted += OnRunStarted;
+            t.DeleteRequested += OnDeleteRequested;
+            t.Changed += SaveTasks;
+            tasks.Add(t);
+            Controls.Add(t);
+            LayoutAll();
+            if (keepCenter) KeepCenter(cx);
+            if (focus) t.BeginEdit();
+            return t;
+        }
+
+        void OnRunStarted(TaskBox started)
+        {
+            // 순 업무시간: 한 번에 하나의 업무만 측정
+            foreach (var t in tasks)
+                if (t != started && t.Running) t.Pause();
+        }
+
+        void OnDeleteRequested(TaskBox t)
+        {
+            string name = string.IsNullOrEmpty(t.TaskText) ? "이 업무" : $"'{t.TaskText}'";
+            if (t.HasStarted &&
+                MessageBox.Show(this, $"{name}를 삭제할까요?\n측정 시간: {Theme.Fmt(t.Elapsed)}", "업무 삭제",
+                    MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
+                return;
+
+            if (tasks.Count == 1) { t.ClearAll(); return; }
+
+            int cx = CenterX;
+            tasks.Remove(t);
+            Controls.Remove(t);
+            t.Dispose();
+            LayoutAll();
+            KeepCenter(cx);
+            SaveTasks();
+        }
+
+        void LayoutAll()
+        {
+            int n = Math.Max(1, tasks.Count);
+            int w = Pad + n * (ColW + Pad);
+            SetContentSize(w, Pad + BoxH + Gap + TimerH + Pad);
+            for (int i = 0; i < tasks.Count; i++)
+                tasks[i].Location = new Point(Pad + i * (ColW + Pad), BannerH + Pad);
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            tick.Stop();
+            SaveTasks();
+            base.OnFormClosing(e);
+        }
+
+        // ── 저장/불러오기 (%APPDATA%\FocusTimer\tasks.txt) ─────────
+        void SaveTasks()
+        {
+            try
+            {
+                Directory.CreateDirectory(Storage.Dir);
+                var sb = new StringBuilder();
+                foreach (var t in tasks)
+                {
+                    if (!t.HasStarted) continue;
+                    sb.Append(Convert.ToBase64String(Encoding.UTF8.GetBytes(t.TaskText)))
+                      .Append('\t').Append(t.Elapsed.Ticks).Append("\r\n");
+                }
+                File.WriteAllText(SavePath, sb.ToString());
+            }
+            catch { /* 저장 실패는 무시 */ }
+        }
+
+        void LoadTasks()
+        {
+            try
+            {
+                if (!File.Exists(SavePath)) return;
+                foreach (var line in File.ReadAllLines(SavePath))
+                {
+                    var parts = line.Split('\t');
+                    if (parts.Length != 2 || !long.TryParse(parts[1], out long ticks)) continue;
+                    string text = Encoding.UTF8.GetString(Convert.FromBase64String(parts[0]));
+                    var t = AddTask(focus: false, keepCenter: false);
+                    t.LoadState(text, ticks);
+                }
+            }
+            catch { /* 손상된 파일이면 새로 시작 */ }
+        }
+    }
+
+    static class Storage
+    {
+        public static readonly string Dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FocusTimer");
+    }
+
+    /// <summary>업무 하나: 위쪽 2x1인치 업무 박스 + 아래쪽 시간 측정 박스</summary>
+    class TaskBox : Control
+    {
+        public string TaskText = "";
+        public bool HasStarted;   // Enter로 한 번이라도 시작했는지
+        public bool Running;
+        public bool Editing;
+
+        long accTicks;
+        readonly Stopwatch sw = new Stopwatch();
+        readonly TextBox editor;
+        readonly float s;
+        readonly int ip;
+        readonly Font textFont, timerFont, hintFont;
+
+        public Rectangle BoxRect, TimerRect;
+
+        public event Action<TaskBox> RunStarted;
+        public event Action<TaskBox> DeleteRequested;
+        public event Action Changed;
+
+        const TextFormatFlags TextFlags = TextFormatFlags.WordBreak | TextFormatFlags.HorizontalCenter |
+            TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix |
+            TextFormatFlags.TextBoxControl;
+
+        public TaskBox(float scale, int w, int boxH, int gap, int timerH)
+        {
+            s = scale;
+            ip = (int)(8 * s);
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            BackColor = Theme.FormBg;
+            Size = new Size(w, boxH + gap + timerH);
+            BoxRect = new Rectangle(0, 0, w, boxH);
+            TimerRect = new Rectangle(0, boxH + gap, w, timerH);
+
+            textFont = new Font("Malgun Gothic", 11f, FontStyle.Bold);
+            timerFont = new Font("Consolas", 12f, FontStyle.Bold);
+            hintFont = new Font("Malgun Gothic", 8.5f);
+
+            editor = new TextBox
+            {
+                Multiline = true,
+                WordWrap = true,
+                AcceptsReturn = false,
+                BorderStyle = BorderStyle.None,
+                ScrollBars = ScrollBars.None,
+                TextAlign = HorizontalAlignment.Center,
+                Font = textFont,
+                BackColor = Theme.EditBg,
+                ForeColor = Color.Black,
+                Bounds = new Rectangle(ip, ip + (int)(4 * s), w - 2 * ip, boxH - 2 * ip - (int)(4 * s)),
+            };
+            editor.KeyDown += Editor_KeyDown;
+            editor.Leave += (o, e) =>
+            {
+                // 이미 시작한 업무를 수정하다가 다른 곳을 누르면 수정 내용 반영
+                if (Editing && HasStarted) BeginInvoke((Action)(() => Commit()));
+            };
+            Controls.Add(editor);
+
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("텍스트 수정", null, (o, e) => BeginEdit());
+            menu.Items.Add("시간 초기화", null, (o, e) => ResetTime());
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("업무 삭제", null, (o, e) => DeleteRequested?.Invoke(this));
+            ContextMenuStrip = menu;
+
+            ShowEditor(false);
+        }
+
+        public TimeSpan Elapsed => new TimeSpan(accTicks + (Running ? sw.Elapsed.Ticks : 0));
+
+        public void LoadState(string text, long ticks)
+        {
+            TaskText = text;
+            accTicks = ticks;
+            HasStarted = true;
+            Running = false;
+            Editing = false;
+            editor.Visible = false;
+            Invalidate();
+        }
+
+        // ── 편집 ──────────────────────────────────────────
+        void ShowEditor(bool focus)
+        {
+            Editing = true;
+            editor.Text = TaskText;
+            editor.Visible = true;
+            if (focus)
+            {
+                editor.Focus();
+                editor.SelectionStart = editor.TextLength;
+            }
+            Invalidate();
+        }
+
+        public void BeginEdit() => ShowEditor(true);
+
+        void Editor_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                e.SuppressKeyPress = true;
+                Commit();
+            }
+            else if (e.KeyCode == Keys.Escape && HasStarted)
+            {
+                e.SuppressKeyPress = true;
+                editor.Text = TaskText; // 수정 취소
+                Commit();
+            }
+            else if (e.Control && e.KeyCode == Keys.A)
+            {
+                e.SuppressKeyPress = true;
+                editor.SelectAll();
+            }
+        }
+
+        void Commit()
+        {
+            if (!Editing) return;
+            string text = editor.Text.Replace("\r", " ").Replace("\n", " ").Trim();
+
+            if (!HasStarted)
+            {
+                if (text.Length == 0) return;      // 빈칸이면 대기
+                TaskText = text;
+                HasStarted = true;
+                CloseEditor();
+                Resume();                           // 처음 Enter → 시간 측정 시작
+            }
+            else
+            {
+                if (text.Length > 0) TaskText = text;
+                CloseEditor();                      // 수정만, 시간 상태는 그대로
+                Changed?.Invoke();
+            }
+        }
+
+        void CloseEditor()
+        {
+            Editing = false;
+            editor.Visible = false;
+            var f = FindForm();
+            if (f != null) f.ActiveControl = null;
+            Invalidate();
+        }
+
+        // ── 시간 ──────────────────────────────────────────
+        public void Toggle()
+        {
+            if (Running) Pause(); else Resume();
+        }
+
+        public void Resume()
+        {
+            if (Running) return;
+            Running = true;
+            sw.Restart();
+            RunStarted?.Invoke(this);
+            Changed?.Invoke();
+            Invalidate();
+        }
+
+        public void Pause()
+        {
+            if (!Running) return;
+            accTicks += sw.Elapsed.Ticks;
+            sw.Reset();
+            Running = false;
+            Changed?.Invoke();
+            Invalidate();
+        }
+
+        public void ResetTime()
+        {
+            accTicks = 0;
+            if (Running) sw.Restart();
+            Changed?.Invoke();
+            Invalidate();
+        }
+
+        public void ClearAll()
+        {
+            Pause();
+            accTicks = 0;
+            TaskText = "";
+            HasStarted = false;
+            ShowEditor(true);
+            Changed?.Invoke();
+        }
+
+        public void InvalidateTimer() => Invalidate(TimerRect);
+
+        // ── 마우스 ─────────────────────────────────────────
+        Rectangle TextHitRect()
+        {
+            if (string.IsNullOrEmpty(TaskText)) return Rectangle.Empty;
+            var inner = Rectangle.Inflate(BoxRect, -ip, -ip);
+            var sz = TextRenderer.MeasureText(TaskText, textFont, inner.Size, TextFlags);
+            int w = Math.Min(sz.Width, inner.Width);
+            int h = Math.Min(sz.Height, inner.Height);
+            var r = new Rectangle(inner.X + (inner.Width - w) / 2, inner.Y + (inner.Height - h) / 2, w, h);
+            return Rectangle.Inflate(r, (int)(3 * s), (int)(2 * s));
+        }
+
+        protected override void OnMouseClick(MouseEventArgs e)
+        {
+            base.OnMouseClick(e);
+            if (e.Button != MouseButtons.Left || Editing || !BoxRect.Contains(e.Location)) return;
+
+            if (!HasStarted) { BeginEdit(); return; }
+
+            if (TextHitRect().Contains(e.Location))
+                BeginEdit();          // 글자 부분 클릭 → 텍스트 수정
+            else
+            {
+                var f = FindForm();   // 다른 박스에서 수정 중이던 내용 확정
+                if (f != null) f.ActiveControl = null;
+                Toggle();             // 나머지 부분 클릭 → 시작/정지
+            }
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            Cursor c = Cursors.Default;
+            if (!Editing && BoxRect.Contains(e.Location))
+                c = HasStarted && !TextHitRect().Contains(e.Location) ? Cursors.Hand : Cursors.IBeam;
+            if (Cursor != c) Cursor = c;
+        }
+
+        // ── 그리기 ─────────────────────────────────────────
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.Clear(BackColor);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            int rad = (int)(6 * s);
+
+            // 업무 박스
+            var box = new Rectangle(BoxRect.X, BoxRect.Y, BoxRect.Width - 1, BoxRect.Height - 1);
+            Color bg = Editing ? Theme.EditBg : Running ? Theme.RunningBg : Theme.PausedBg;
+            Color fg = Running ? Theme.RunningFg : Theme.PausedFg;
+            using (var path = Theme.Rounded(box, rad))
+            {
+                using (var b = new SolidBrush(bg)) g.FillPath(b, path);
+                if (Editing)
+                    using (var pen = new Pen(Theme.EditBorder, Math.Max(2f, 2 * s))) g.DrawPath(pen, path);
+            }
+            if (!Editing)
+                TextRenderer.DrawText(g, TaskText, textFont, Rectangle.Inflate(BoxRect, -ip, -ip), fg, TextFlags);
+
+            // 시간 측정 박스
+            Theme.FillRounded(g, TimerRect, rad, Theme.TimerBg);
+            var cflags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+                         TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
+            if (!HasStarted)
+            {
+                TextRenderer.DrawText(g, "업무 입력 후 Enter", hintFont, TimerRect, Theme.Hint, cflags);
+            }
+            else
+            {
+                string str = (Running ? "● " : "‖ ") + Theme.Fmt(Elapsed);
+                TextRenderer.DrawText(g, str, timerFont, TimerRect,
+                    Running ? Theme.TimerRunning : Theme.TimerPaused, cflags);
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                textFont.Dispose();
+                timerFont.Dispose();
+                hintFont.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+    }
+}
