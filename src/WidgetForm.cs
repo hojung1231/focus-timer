@@ -15,12 +15,12 @@ namespace FocusTimer
         protected readonly int BannerH, Pad, Gap, BtnW, ColW, BoxH, TimerH;
         protected readonly Panel Banner;
         protected readonly ToolTip Tip = new ToolTip();
-        readonly Label minBtn, closeBtn, updateBtn, gearBtn;
+        readonly Label minBtn, closeBtn, gearBtn;
         readonly ContextMenuStrip menu = new ContextMenuStrip();
         readonly Timer hoverTimer;
         readonly List<Label> leftItems = new List<Label>();
         int lastWidth, lastContentH;
-        string updateProgress;   // 업데이트 받는 중이면 진행률 글자
+        static bool updateAnnounced;
 
         public event Action HomeRequested;
         public event Action UpdateRequested;
@@ -70,21 +70,13 @@ namespace FocusTimer
             Tip.SetToolTip(minBtn, "최소화");
             Tip.SetToolTip(closeBtn, "닫기");
 
-            // 새 버전이 있을 때만 보이는 업데이트 버튼
-            updateBtn = MakeBannerButton("⬆", Color.FromArgb(66, 133, 244), true);
-            updateBtn.BackColor = Theme.UpdateBg;
-            updateBtn.ForeColor = Color.White;
-            updateBtn.MouseLeave += (o, e) => updateBtn.BackColor = Theme.UpdateBg;
-            updateBtn.Visible = false;
-            updateBtn.Click += (o, e) => { if (updateProgress == null) UpdateRequested?.Invoke(); };
-            Banner.Controls.Add(updateBtn);
-
             // ⚙ 옵션 버튼 (배너 우클릭과 같은 메뉴)
             gearBtn = MakeBannerButton("⚙", Theme.BannerHover, true);
             gearBtn.Font = new Font("Segoe UI Symbol", 7f);
             gearBtn.Click += (o, e) => menu.Show(gearBtn, new Point(0, BannerH));
+            gearBtn.MouseLeave += (o, e) => PaintGear();
             Banner.Controls.Add(gearBtn);
-            Tip.SetToolTip(gearBtn, "옵션 (투명도, 표시 개수)");
+            Tip.SetToolTip(gearBtn, "옵션 · 업데이트");
 
             menu.Opening += (o, e) => BuildMenu();
             Banner.ContextMenuStrip = menu;
@@ -126,12 +118,24 @@ namespace FocusTimer
                 (o, e) => Settings.SetHoverOpaque(!Settings.HoverOpaque)) { Checked = Settings.HoverOpaque });
 
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("업데이트 확인", null, async (o, e) =>
+            if (Updater.Available)
             {
-                bool ok = await Updater.CheckAsync();
-                if (!ok) Toast("업데이트 정보를 가져오지 못했어요");
-                else if (!Updater.Available) Toast($"최신 버전이에요 (v{Updater.Text(Updater.Current)})");
-            });
+                var up = new ToolStripMenuItem($"⬆ 새 버전 v{Updater.Text(Updater.Latest)}로 업데이트", null,
+                    (o, e) => UpdateRequested?.Invoke());
+                up.Font = new Font(up.Font, FontStyle.Bold);
+                up.ForeColor = Theme.UpdateBg;
+                menu.Items.Insert(0, up);
+                menu.Items.Insert(1, new ToolStripSeparator());
+            }
+            else
+            {
+                menu.Items.Add("업데이트 확인", null, async (o, e) =>
+                {
+                    bool ok = await Updater.CheckAsync();
+                    if (!ok) Toast("업데이트 정보를 가져오지 못했어요");
+                    else if (!Updater.Available) Toast($"최신 버전이에요 (v{Updater.Text(Updater.Current)})");
+                });
+            }
             menu.Items.Add("다운로드 페이지 열기", null, (o, e) => Updater.OpenPage());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem($"버전 v{Updater.Text(Updater.Current)}") { Enabled = false });
@@ -172,20 +176,32 @@ namespace FocusTimer
             Tip.Show(text, this, Pad, BannerH + Pad, 2500);
         }
 
+        /// <summary>업데이트 받는 중 진행률 안내 (null이면 끝)</summary>
         public void SetUpdateProgress(string text)
         {
-            updateProgress = text;
-            RefreshUpdateButton();
+            if (text != null) Toast("업데이트 받는 중… " + text);
+            else Tip.Hide(this);
         }
 
+        /// <summary>새 버전이 있으면 ⚙ 버튼을 파랗게 + 한 번 안내</summary>
         void RefreshUpdateButton()
         {
             if (IsDisposed) return;
-            bool show = Updater.Available || updateProgress != null;
-            updateBtn.Visible = show;
-            if (show)
-                Tip.SetToolTip(updateBtn, $"새 버전 v{Updater.Text(Updater.Latest)} 업데이트 (현재 v{Updater.Text(Updater.Current)})");
-            if (lastWidth > 0) SetContentSize(lastWidth, lastContentH);
+            PaintGear();
+            Tip.SetToolTip(gearBtn, Updater.Available
+                ? $"새 버전 v{Updater.Text(Updater.Latest)}이 있어요 — 눌러서 업데이트"
+                : "옵션 · 업데이트");
+            if (Updater.Available && !updateAnnounced && Visible)
+            {
+                updateAnnounced = true;
+                Toast("새 버전이 있어요 · ⚙ 눌러서 업데이트");
+            }
+        }
+
+        void PaintGear()
+        {
+            gearBtn.BackColor = Updater.Available ? Theme.UpdateBg : Theme.BannerBg;
+            gearBtn.ForeColor = Updater.Available ? Color.White : Theme.BannerFg;
         }
 
         static Icon appIcon;
@@ -257,20 +273,7 @@ namespace FocusTimer
             ClientSize = new Size(width, BannerH + contentHeight);
             Banner.Bounds = new Rectangle(0, 0, width, BannerH);
 
-            int leftTotal = 0;
-            foreach (var l in leftItems) leftTotal += l.Width;
             int rightLimit = width - 3 * BtnW;
-            if (updateBtn.Visible)
-            {
-                // 자리가 있으면 "⬆ 업데이트", 좁으면 "⬆"만
-                int wide = (int)(50 * S);
-                bool roomy = width - 3 * BtnW - leftTotal >= wide;
-                int uw = roomy ? wide : BtnW;
-                updateBtn.Text = updateProgress ?? (roomy ? "⬆ 업데이트" : "⬆");
-                if (updateProgress != null) uw = Math.Max(uw, (int)(36 * S));
-                updateBtn.Bounds = new Rectangle(rightLimit - uw, 0, uw, BannerH);
-                rightLimit -= uw;
-            }
             int x = 0;
             foreach (var l in leftItems)
             {

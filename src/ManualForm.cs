@@ -25,6 +25,14 @@ namespace FocusTimer
             var add = AddBannerItem("+", BtnW, "오른쪽에 새 업무 추가", true);
             add.Click += (o, e) => AddTask(focus: true);
 
+            // ↺ 초기화: 시간만 0으로 / 업무 모두 지우기
+            var reset = AddBannerItem("↺", BtnW, "초기화", true);
+            reset.Font = new Font("Segoe UI Symbol", 7.5f, FontStyle.Bold);
+            var resetMenu = new ContextMenuStrip();
+            resetMenu.Items.Add("모든 업무 시간만 0으로", null, (o, e) => ResetAllTimes());
+            resetMenu.Items.Add("업무 모두 지우기", null, (o, e) => ClearAllTasks());
+            reset.Click += (o, e) => resetMenu.Show(reset, new Point(0, BannerH));
+
             LoadTasks();
             if (tasks.Count == 0) AddTask(focus: false, keepCenter: false);
             LayoutAll();
@@ -58,6 +66,31 @@ namespace FocusTimer
                 var t = tasks.FirstOrDefault(x => x.AutoPaused);
                 if (t != null) t.Resume();
             }
+        }
+
+        void ResetAllTimes()
+        {
+            if (MessageBox.Show(this, "모든 업무의 측정 시간을 0으로 만들까요?\n(업무 이름은 그대로)", "초기화",
+                    MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+            foreach (var t in tasks) t.ResetTime();
+            SaveTasks();
+        }
+
+        void ClearAllTasks()
+        {
+            if (MessageBox.Show(this, "모든 업무와 시간을 지울까요?", "초기화",
+                    MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
+            int cx = CenterX;
+            foreach (var t in tasks.Skip(1).ToList())
+            {
+                tasks.Remove(t);
+                Controls.Remove(t);
+                t.Dispose();
+            }
+            tasks[0].ClearAll();
+            LayoutAll();
+            KeepCenter(cx);
+            SaveTasks();
         }
 
         TaskBox AddTask(bool focus, bool keepCenter = true)

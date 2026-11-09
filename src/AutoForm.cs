@@ -50,7 +50,10 @@ namespace FocusTimer
 
         public AutoForm() : base(showHome: true)
         {
-            AddBannerItem(" 자동", (int)(26 * S), null, false);
+            var reset = AddBannerItem("↺", BtnW, "기록 초기화", true);
+            reset.Font = new Font("Segoe UI Symbol", 7.5f, FontStyle.Bold);
+            reset.Click += (o, e) => ResetAll();
+            AddBannerItem(" 자동", (int)(34 * S), null, false);
             stripH = (int)(15 * S);
 
             bool demo = Environment.GetEnvironmentVariable("FOCUSTIMER_DEMO") == "1" &&
@@ -325,6 +328,19 @@ namespace FocusTimer
         {
             rules.Save();
             try { Process.Start("notepad.exe", "\"" + DistractionRules.FilePath + "\""); } catch { }
+        }
+
+        void ResetAll()
+        {
+            if (MessageBox.Show(this, "자동 감지 기록(작업 목록과 시간)을 모두 지울까요?", "초기화",
+                    MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+            items.Clear();
+            current = null;
+            totalWork = 0;
+            distractSec = 0;
+            distractName = distractRule = null;
+            mode = Mode.Starting;
+            UpdateUI();
         }
 
         void OnSettingsChanged()

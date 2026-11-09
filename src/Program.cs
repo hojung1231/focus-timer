@@ -40,17 +40,22 @@ namespace FocusTimer
         }
     }
 
-    /// <summary>홈 화면 ↔ 버전 1/2 화면 전환, 업데이트 실행</summary>
+    /// <summary>
+    /// 홈 화면 ↔ 버전 1/2 화면 전환, 업데이트 실행.
+    /// 화면은 닫지 않고 숨겨 두므로 홈에 갔다 와도 기록이 그대로 유지됨.
+    /// </summary>
     class AppController : ApplicationContext
     {
+        HomeForm home;
+        ManualForm manual;
+        AutoForm auto;
         WidgetForm current;
+        bool exiting;
         public string RestartArgs { get; private set; }
 
         public AppController(int mode, bool updated)
         {
-            if (mode == 1) Switch(new ManualForm());
-            else if (mode == 2) Switch(new AutoForm());
-            else ShowHome();
+            Show(mode == 1 ? (WidgetForm)Manual : mode == 2 ? (WidgetForm)Auto : Home);
 
             if (updated)
             {
@@ -61,29 +66,48 @@ namespace FocusTimer
             Updater.Start();
         }
 
-        void ShowHome()
+        HomeForm Home
         {
-            var home = new HomeForm();
-            home.ModeChosen += mode =>
+            get
             {
-                if (mode == 1) Switch(new ManualForm());
-                else Switch(new AutoForm());
-            };
-            Switch(home);
+                if (home != null) return home;
+                home = Wire(new HomeForm());
+                home.ModeChosen += mode => Show(mode == 1 ? (WidgetForm)Manual : Auto);
+                return home;
+            }
         }
 
-        void Switch(WidgetForm next)
+        ManualForm Manual => manual ?? (manual = Wire(new ManualForm()));
+        AutoForm Auto => auto ?? (auto = Wire(new AutoForm()));
+
+        T Wire<T>(T f) where T : WidgetForm
         {
+            f.HomeRequested += () => Show(Home);
+            f.UpdateRequested += () => RunUpdate(f);
+            f.FormClosed += (o, e) => Shutdown(f);   // ✕ 누르면 프로그램 종료
+            return f;
+        }
+
+        void Show(WidgetForm next)
+        {
+            if (next == current) return;
             var old = current;
             current = next;
-            next.HomeRequested += ShowHome;
-            next.UpdateRequested += () => RunUpdate(next);
-            next.FormClosed += (o, e) => { if (current == next) ExitThread(); };
-
             if (old != null) next.PlaceLike(old);
             else next.CenterTop();
             next.Show();
-            old?.Close();
+            next.Activate();
+            old?.Hide();   // 닫지 않고 숨김 → 다시 들어오면 그대로
+        }
+
+        /// <summary>모든 화면을 닫아(VER 1 기록 저장) 프로그램 종료</summary>
+        void Shutdown(Form closedOne)
+        {
+            if (exiting) return;
+            exiting = true;
+            foreach (var f in new Form[] { home, manual, auto })
+                if (f != null && f != closedOne && !f.IsDisposed) f.Close();
+            ExitThread();
         }
 
         async void RunUpdate(WidgetForm f)
@@ -91,7 +115,7 @@ namespace FocusTimer
             string msg = $"새 버전이 있어요.\n\n현재 v{Updater.Text(Updater.Current)} → 새 버전 v{Updater.Text(Updater.Latest)}";
             if (Updater.Notes.Length > 0) msg += "\n\n" + Updater.Notes;
             msg += "\n\n지금 업데이트하고 다시 시작할까요?";
-            if (f.ModeId == 2) msg += "\n(자동 감지 화면의 이번 기록은 초기화됩니다)";
+            if (auto != null) msg += "\n(자동 감지 기록은 초기화됩니다)";
             if (MessageBox.Show(f, msg, "업데이트", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
                 return;
 
@@ -115,7 +139,7 @@ namespace FocusTimer
 
             // 기록 저장(창 닫기) → 완전히 종료된 뒤 새 버전 실행
             RestartArgs = $"--updated --mode={f.ModeId}";
-            current.Close();
+            Shutdown(null);
         }
     }
 }
