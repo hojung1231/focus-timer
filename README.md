@@ -3,10 +3,13 @@
 항상 화면 맨 위(상단 중앙)에 떠 있으면서 **순 업무시간**을 측정하는 Windows용 작은 타이머입니다.
 
 ## 다운로드
-[Releases](../../releases) 페이지에서 `FocusTimer.exe`(또는 `FocusTimer.zip`)를 받아 실행하세요.
+- **[FocusTimer.exe 바로 받기](https://github.com/hojung1231/focus-timer/raw/main/download/FocusTimer.exe)**
+- exe 다운로드가 막히면: **[FocusTimer.zip 받기](https://github.com/hojung1231/focus-timer/raw/main/download/FocusTimer.zip)** → 압축 풀고 실행
+
 설치가 필요 없습니다. Windows 10/11에 기본 포함된 .NET Framework 4.8로 동작합니다.
 
 > 처음 실행할 때 "Windows의 PC 보호" 경고가 뜨면 **추가 정보 → 실행**을 누르세요. (코드 서명이 없는 프로그램이라 나오는 경고입니다.)
+> 예전 버전이 켜져 있으면 먼저 닫아 주세요. (한 번에 하나만 실행됩니다.)
 
 ## 사용법
 실행하면 **홈 화면**에서 버전을 고릅니다. 각 화면의 배너 `⌂` 버튼으로 언제든 홈으로 돌아갑니다.
